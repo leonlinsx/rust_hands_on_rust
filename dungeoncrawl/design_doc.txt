@@ -1,0 +1,31 @@
+project name: rusty roguelike
+
+short description: dungeon crawler with 1) procedurally generated levels 2) monsters of increasing difficulty 3) turn based movement
+
+story: everyone who has explored the dungeon has never returned. you are next
+
+basic game loops:
+1. enter dungeon level
+2. explore, revealing the map
+3. encounter enemies whom the player fights or flees from
+4. find power ups and use them to strengthen the player
+5. locate the exit to the level - go to 1 
+
+minimum viable product:
+1. create a basic dungeon map
+2. place the player and let them walk around
+3. spawn monsters, draw them, and let the player kill them by walking into them
+4. add health and a combat system that uses health
+5. add healing potions
+6. display a game over screen when the player dies
+7. add the grail and let the player win by reaching it 
+
+stretch goals: 
+1. add fields of view 
+2. add more interesting dungeon designs 
+3. add dungeon themes 
+4. add multiple layers to the dungeon, with the grail on the last one 
+5. add varied weapons
+6. move to a data driven design for spawning the enemies 
+7. add visual effects to combat 
+8. keep score 
