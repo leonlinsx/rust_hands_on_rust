@@ -66,16 +66,27 @@ impl State {
 
 impl GameState for State {
     fn tick(&mut self, ctx: &mut BTerm) {
+        // multiple layers
         ctx.set_active_console(0);
         ctx.cls();
         ctx.set_active_console(1);
         ctx.cls();
+        ctx.set_active_console(2);
+        ctx.cls();
         self.resources.insert(ctx.key); // insert current key press into resources
+        ctx.set_active_console(0); // get mouse pos coordinates from correct layer
+        self.resources.insert(Point::from_tuple(ctx.mouse_pos())); // tuple of x,y coordinates
         let current_state = self.resources.get::<TurnState>().unwrap().clone(); // requests a resource, gets an Option that needs to be unwrapped, clone to use a copy
         match current_state {
-            TurnState::AwaitingInput => self.input_systems.execute(&mut self.ecs, &mut self.resources),
-            TurnState::PlayerTurn => self.player_systems.execute(&mut self.ecs, &mut self.resources),
-            TurnState::EnemyTurn => self.enemy_systems.execute(&mut self.ecs, &mut self.resources),
+            TurnState::AwaitingInput => self
+                .input_systems
+                .execute(&mut self.ecs, &mut self.resources),
+            TurnState::PlayerTurn => self
+                .player_systems
+                .execute(&mut self.ecs, &mut self.resources),
+            TurnState::EnemyTurn => self
+                .enemy_systems
+                .execute(&mut self.ecs, &mut self.resources),
         }
         render_draw_buffer(ctx).expect("Render error");
     }
@@ -89,8 +100,10 @@ fn main() -> BError {
         .with_tile_dimensions(32, 32)
         .with_resource_path("resources/")
         .with_font("dungeonfont.png", 32, 32)
+        .with_font("terminal8x8.png", 8, 8)
         .with_simple_console(DISPLAY_WIDTH, DISPLAY_HEIGHT, "dungeonfont.png")
         .with_simple_console_no_bg(DISPLAY_WIDTH, DISPLAY_HEIGHT, "dungeonfont.png") // allows transparency
+        .with_simple_console_no_bg(SCREEN_WIDTH * 2, SCREEN_HEIGHT * 2, "terminal8x8.png")
         .build()?;
 
     main_loop(context, State::new())
