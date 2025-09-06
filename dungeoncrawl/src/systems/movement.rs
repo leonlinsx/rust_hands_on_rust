@@ -1,6 +1,6 @@
 use crate::prelude::*;
 
-#[system(for_each)]
+#[system(for_each)] // for each Entity with WantsToMove component
 #[read_component(Player)]
 pub fn movement(
     entity: &Entity,
@@ -13,7 +13,7 @@ pub fn movement(
     if map.can_enter_tile(want_move.destination) {
         commands.add_component(want_move.entity, want_move.destination);
 
-        // access the details of another component on entity outside of the query
+        // access the details of another component on entity outside of the query for_each
         if ecs
             .entry_ref(want_move.entity)
             .unwrap()
