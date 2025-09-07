@@ -5,9 +5,10 @@ use crate::prelude::*;
 #[read_component(ChasingPlayer)]
 #[read_component(Health)]
 #[read_component(Player)]
+#[read_component(FieldOfView)]
 
 pub fn chasing(#[resource] map: &Map, ecs: &SubWorld, commands: &mut CommandBuffer) {
-    let mut movers = <(Entity, &Point, &ChasingPlayer)>::query();
+    let mut movers = <(Entity, &Point, &ChasingPlayer, &FieldOfView)>::query();
     let mut positions = <(Entity, &Point, &Health)>::query();
     let mut player = <(&Point, &Player)>::query();
     let player_pos = player.iter(ecs).nth(0).unwrap().0;
@@ -21,7 +22,11 @@ pub fn chasing(#[resource] map: &Map, ecs: &SubWorld, commands: &mut CommandBuff
         1024.0, // max search distance
     );
 
-    movers.iter(ecs).for_each(|(entity, pos, _)| {
+    movers.iter(ecs).for_each(|(entity, pos, _, fov)| {
+        // only chase if the player is in the entity's FOV
+        if !fov.visible_tiles.contains(player_pos) {
+            return;
+        }
         let idx = map_idx(pos.x, pos.y);
         // returns Option, use if let to only continue if Some
         if let Some(destination) = DijkstraMap::find_lowest_exit(&dijkstra_map, idx, map) {

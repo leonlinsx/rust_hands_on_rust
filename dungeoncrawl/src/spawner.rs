@@ -12,6 +12,7 @@ pub fn spawn_player(ecs: &mut World, position: Point) {
             current: 100,
             max: 100,
         },
+        FieldOfView::new(8),
     ));
 }
 
@@ -34,7 +35,8 @@ pub fn spawn_monster(ecs: &mut World, rng: &mut RandomNumberGenerator, position:
             current: hp,
             max: hp,
         },
-        Name(name), // different because of tuple struct
+        Name(name),          // different because of tuple struct
+        FieldOfView::new(6), // enemies have smaller fov than player
     ));
 
     // hitpoint, name, ascii char reference
