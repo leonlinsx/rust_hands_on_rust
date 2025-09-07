@@ -1,38 +1,95 @@
+mod automata;
+mod drunkard;
+mod empty;
+mod prefab;
+mod rooms;
+
 use crate::prelude::*;
+use automata::CellularAutomataArchitect;
+use drunkard::DrunkardWalkArchitect;
+use empty::EmptyArchitect;
+use prefab::apply_prefab;
+use rooms::RoomsArchitect;
+
+trait MapArchitect {
+    fn new(&mut self, rng: &mut RandomNumberGenerator) -> MapBuilder;
+}
+
 const NUM_ROOMS: usize = 20;
 
 pub struct MapBuilder {
     pub map: Map,
     pub rooms: Vec<Rect>,
+    pub monster_spawns: Vec<Point>,
     pub player_start: Point,
     pub grail_start: Point,
 }
 
 impl MapBuilder {
     pub fn new(rng: &mut RandomNumberGenerator) -> Self {
-        let mut mb = MapBuilder {
-            map: Map::new(),
-            rooms: Vec::new(),
-            player_start: Point::zero(),
-            grail_start: Point::zero(),
+        let mut architect: Box<dyn MapArchitect> = match rng.range(0, 3) {
+            0 => Box::new(CellularAutomataArchitect {}),
+            1 => Box::new(DrunkardWalkArchitect {}),
+            _ => Box::new(RoomsArchitect {}),
         };
-        mb.fill(TileType::Wall);
-        mb.build_random_rooms(rng);
-        mb.build_corridors(rng);
-        // place player in center of first room so they start in valid tile
-        mb.player_start = mb.rooms[0].center();
+        let mut mb = architect.new(rng);
+        apply_prefab(&mut mb, rng);
+        mb
+    }
 
+    // pub fn new(rng: &mut RandomNumberGenerator) -> Self {
+    //     let mut mb = MapBuilder {
+    //         map: Map::new(),
+    //         rooms: Vec::new(),
+    //         player_start: Point::zero(),
+    //         grail_start: Point::zero(),
+    //     };
+    //     mb.fill(TileType::Wall);
+    //     mb.build_random_rooms(rng);
+    //     mb.build_corridors(rng);
+    //     // place player in center of first room so they start in valid tile
+    //     mb.player_start = mb.rooms[0].center();
+
+    //     let dijkstra_map = DijkstraMap::new(
+    //         SCREEN_WIDTH,
+    //         SCREEN_HEIGHT,
+    //         &vec![mb.map.point2d_to_index(mb.player_start)],
+    //         &mb.map,
+    //         1024.0,
+    //     );
+
+    //     // find furthest point from player start
+    //     const UNREACHABLE: &f32 = &f32::MAX;
+    //     mb.grail_start = mb.map.index_to_point2d(
+    //         dijkstra_map
+    //             .map
+    //             .iter()
+    //             .enumerate()
+    //             .filter(|(_, distance)| *distance < UNREACHABLE) // filter out unreachable tiles
+    //             // cant use max since entry is borrowed, so use max_by with partial_cmp
+    //             .max_by(|a, b| a.1.partial_cmp(b.1).unwrap()) // get furthest reachable tile
+    //             .unwrap()
+    //             .0, // get first item of tuple, the index
+    //     );
+    //     mb
+    // }
+
+    fn fill(&mut self, tile: TileType) {
+        self.map.tiles.iter_mut().for_each(|t| *t = tile);
+    }
+
+    fn find_most_distant(&self) -> Point {
         let dijkstra_map = DijkstraMap::new(
             SCREEN_WIDTH,
             SCREEN_HEIGHT,
-            &vec![mb.map.point2d_to_index(mb.player_start)],
-            &mb.map,
+            &vec![self.map.point2d_to_index(self.player_start)],
+            &self.map,
             1024.0,
         );
 
         // find furthest point from player start
         const UNREACHABLE: &f32 = &f32::MAX;
-        mb.grail_start = mb.map.index_to_point2d(
+        self.map.index_to_point2d(
             dijkstra_map
                 .map
                 .iter()
@@ -42,12 +99,7 @@ impl MapBuilder {
                 .max_by(|a, b| a.1.partial_cmp(b.1).unwrap()) // get furthest reachable tile
                 .unwrap()
                 .0, // get first item of tuple, the index
-        );
-        mb
-    }
-
-    fn fill(&mut self, tile: TileType) {
-        self.map.tiles.iter_mut().for_each(|t| *t = tile);
+        )
     }
 
     fn apply_horizontal_tunnel(&mut self, x1: i32, x2: i32, y: i32) {
@@ -118,5 +170,33 @@ impl MapBuilder {
                 self.rooms.push(room);
             }
         }
+    }
+
+    fn spawn_monsters(&self, start: &Point, rng: &mut RandomNumberGenerator) -> Vec<Point> {
+        const NUM_MONSTERS: usize = 50;
+        let mut spawnable_tiles: Vec<Point> = self
+            .map
+            .tiles
+            .iter()
+            .enumerate()
+            // filter to only floor tiles and those far enough from player start
+            .filter(|(idx, tile)| {
+                **tile == TileType::Floor
+                    && DistanceAlg::Pythagoras.distance2d(*start, self.map.index_to_point2d(*idx))
+                        > 10.0
+            })
+            .map(|(idx, _)| self.map.index_to_point2d(idx))
+            .collect();
+
+        let mut spawns = Vec::new();
+        for _ in 0..NUM_MONSTERS {
+            // randomly select a tile from slice of available spawnable tiles
+            let target_index = rng.random_slice_index(&spawnable_tiles).unwrap();
+            spawns.push(spawnable_tiles[target_index].clone());
+            // remove from available tiles so we dont spawn multiple monsters in same spot
+            spawnable_tiles.remove(target_index);
+        }
+
+        spawns
     }
 }
