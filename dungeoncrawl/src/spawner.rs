@@ -9,8 +9,8 @@ pub fn spawn_player(ecs: &mut World, position: Point) {
             glyph: to_cp437('@'),
         },
         Health {
-            current: 10,
-            max: 10,
+            current: 100,
+            max: 100,
         },
     ));
 }
@@ -45,4 +45,17 @@ pub fn spawn_monster(ecs: &mut World, rng: &mut RandomNumberGenerator, position:
     fn orc() -> (i32, String, FontCharType) {
         (2, "Orc".to_string(), to_cp437('o'))
     }
+}
+
+pub fn spawn_grail(ecs: &mut World, position: Point) {
+    ecs.push((
+        Item,
+        Grail,
+        position,
+        Render {
+            color: ColorPair::new(GOLD, BLACK),
+            glyph: to_cp437('|'),
+        },
+        Name("The Holy Grail".to_string()),
+    ));
 }

@@ -42,6 +42,7 @@ impl State {
         let mut rng = RandomNumberGenerator::new();
         let map_builder = MapBuilder::new(&mut rng);
         spawn_player(&mut ecs, map_builder.player_start);
+        spawn_grail(&mut ecs, map_builder.grail_start);
         map_builder
             .rooms
             .iter()
@@ -61,6 +62,25 @@ impl State {
             player_systems: build_player_scheduler(),
             enemy_systems: build_enemy_scheduler(),
         }
+    }
+
+    fn reset_game_state(&mut self) {
+        self.ecs = World::default();
+        self.resources = Resources::default();
+        let mut rng = RandomNumberGenerator::new();
+        let map_builder = MapBuilder::new(&mut rng);
+        spawn_player(&mut self.ecs, map_builder.player_start);
+        map_builder
+            .rooms
+            .iter()
+            .skip(1) // skip first room, where player starts
+            .map(|r| r.center()) // transform to center point of room
+            .for_each(|pos| {
+                spawn_monster(&mut self.ecs, &mut rng, pos);
+            });
+        self.resources.insert(map_builder.map);
+        self.resources.insert(Camera::new(map_builder.player_start));
+        self.resources.insert(TurnState::AwaitingInput);
     }
 
     fn game_over(&mut self, ctx: &mut BTerm) {
@@ -83,22 +103,31 @@ impl State {
         ctx.print_color_centered(18, GREEN, BLACK, "Press 1 to play again.");
 
         if let Some(VirtualKeyCode::Key1) = ctx.key {
-            self.ecs = World::default();
-            self.resources = Resources::default();
-            let mut rng = RandomNumberGenerator::new();
-            let map_builder = MapBuilder::new(&mut rng);
-            spawn_player(&mut self.ecs, map_builder.player_start);
-            map_builder
-                .rooms
-                .iter()
-                .skip(1) // skip first room, where player starts
-                .map(|r| r.center()) // transform to center point of room
-                .for_each(|pos| {
-                    spawn_monster(&mut self.ecs, &mut rng, pos);
-                });
-            self.resources.insert(map_builder.map);
-            self.resources.insert(Camera::new(map_builder.player_start));
-            self.resources.insert(TurnState::AwaitingInput);
+            self.reset_game_state();
+        }
+    }
+
+    fn victory(&mut self, ctx: &mut BTerm) {
+        ctx.cls();
+        ctx.set_active_console(2); // use top layer for UI
+        ctx.print_color_centered(10, GOLD, BLACK, "You found the Holy Grail!");
+        ctx.print_color_centered(
+            12,
+            WHITE,
+            BLACK,
+            "With the grail in hand, you return to your home town.",
+        );
+        ctx.print_color_centered(
+            14,
+            WHITE,
+            BLACK,
+            "The townsfolk rejoice as you bring them salvation.",
+        );
+        ctx.print_color_centered(16, WHITE, BLACK, "Congratulations on your victory!");
+        ctx.print_color_centered(18, GREEN, BLACK, "Press 1 to play again.");
+
+        if let Some(VirtualKeyCode::Key1) = ctx.key {
+            self.reset_game_state();
         }
     }
 }
@@ -127,6 +156,7 @@ impl GameState for State {
                 .enemy_systems
                 .execute(&mut self.ecs, &mut self.resources),
             TurnState::GameOver => self.game_over(ctx),
+            TurnState::Victory => self.victory(ctx),
         }
         render_draw_buffer(ctx).expect("Render error");
     }
