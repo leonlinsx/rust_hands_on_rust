@@ -40,9 +40,11 @@ impl State {
         let mut ecs = World::default();
         let mut resources = Resources::default();
         let mut rng = RandomNumberGenerator::new();
-        let map_builder = MapBuilder::new(&mut rng);
+        let mut map_builder = MapBuilder::new(&mut rng);
         spawn_player(&mut ecs, map_builder.player_start);
-        spawn_grail(&mut ecs, map_builder.grail_start);
+        // spawn_grail(&mut ecs, map_builder.grail_start);
+        let exit_idx = map_builder.map.point2d_to_index(map_builder.grail_start);
+        map_builder.map.tiles[exit_idx] = TileType::Exit;
         map_builder.monster_spawns.iter().for_each(|pos| {
             spawn_entity(&mut ecs, &mut rng, *pos);
         });
@@ -64,8 +66,11 @@ impl State {
         self.ecs = World::default();
         self.resources = Resources::default();
         let mut rng = RandomNumberGenerator::new();
-        let map_builder = MapBuilder::new(&mut rng);
+        let mut map_builder = MapBuilder::new(&mut rng);
         spawn_player(&mut self.ecs, map_builder.player_start);
+        // spawn_grail(&mut ecs, map_builder.grail_start);
+        let exit_idx = map_builder.map.point2d_to_index(map_builder.grail_start);
+        map_builder.map.tiles[exit_idx] = TileType::Exit;
         map_builder.monster_spawns.iter().for_each(|pos| {
             spawn_entity(&mut self.ecs, &mut rng, *pos);
         });
@@ -122,6 +127,74 @@ impl State {
             self.reset_game_state();
         }
     }
+
+    fn advance_level(&mut self) {
+        // need to know which items are carried to keep them
+        let player_entity = *<Entity>::query()
+            .filter(component::<Player>())
+            .iter(&mut self.ecs)
+            .nth(0)
+            .unwrap();
+
+        use std::collections::HashSet;
+        let mut entities_to_keep = HashSet::new();
+        entities_to_keep.insert(player_entity);
+
+        <(Entity, &Carried)>::query()
+            .iter(&self.ecs)
+            .filter(|(_, carried)| carried.0 == player_entity)
+            .map(|(entity, _)| *entity)
+            .for_each(|e| {
+                entities_to_keep.insert(e);
+            });
+
+        // remove all entities not in the keep list
+        // command buffer is fast and ensures no borrow conflicts
+        let mut cb = CommandBuffer::new(&mut self.ecs);
+        for e in Entity::query().iter(&self.ecs) {
+            if !entities_to_keep.contains(e) {
+                cb.remove(*e);
+            }
+        }
+
+        cb.flush(&mut self.ecs);
+
+        // set fov to dirty so it gets recalculated
+        <&mut FieldOfView>::query()
+            .iter_mut(&mut self.ecs)
+            .for_each(|fov| fov.is_dirty = true);
+
+        // build new map for next level
+        let mut rng = RandomNumberGenerator::new();
+        let mut map_builder = MapBuilder::new(&mut rng);
+
+        let mut map_level = 0;
+        <(&mut Player, &mut Point)>::query()
+            .iter_mut(&mut self.ecs)
+            .for_each(|(player, pos)| {
+                player.map_level += 1;
+                map_level = player.map_level;
+                pos.x = map_builder.player_start.x;
+                pos.y = map_builder.player_start.y;
+            });
+
+        // spawn grail on last level, exit on other levels
+        if map_level == 2 {
+            spawn_grail(&mut self.ecs, map_builder.grail_start);
+        } else {
+            let exit_idx = map_builder.map.point2d_to_index(map_builder.grail_start);
+            map_builder.map.tiles[exit_idx] = TileType::Exit;
+        }
+
+        // update monster and other resources
+        map_builder.monster_spawns.iter().for_each(|pos| {
+            spawn_entity(&mut self.ecs, &mut rng, *pos);
+        });
+        self.resources.insert(map_builder.map);
+        self.resources.insert(Camera::new(map_builder.player_start));
+        self.resources.insert(TurnState::AwaitingInput);
+        self.resources.insert(map_builder.theme);
+    }
 }
 
 impl GameState for State {
@@ -147,6 +220,9 @@ impl GameState for State {
             TurnState::EnemyTurn => self
                 .enemy_systems
                 .execute(&mut self.ecs, &mut self.resources),
+            TurnState::NextLevel => {
+                self.advance_level();
+            }
             TurnState::GameOver => self.game_over(ctx),
             TurnState::Victory => self.victory(ctx),
         }

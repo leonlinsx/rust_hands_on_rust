@@ -5,12 +5,15 @@ use crate::prelude::*;
 #[read_component(Player)]
 #[read_component(Grail)]
 #[read_component(Point)]
-pub fn end_turn(ecs: &SubWorld, #[resource] turn_state: &mut TurnState) {
+pub fn end_turn(ecs: &SubWorld, #[resource] turn_state: &mut TurnState, #[resource] map: &Map) {
     // Access the ECS world to query entities, filtering to player health
     let mut player_hp = <(&Health, &Point)>::query().filter(component::<Player>());
     let mut grail = <&Point>::query().filter(component::<Grail>());
     let current_state = turn_state.clone();
-    let grail_position = grail.iter(ecs).nth(0).unwrap();
+    // cannot do oneliner because of borrow checker
+    let grail_default = Point::new(-1, -1);
+    let grail_position = grail.iter(ecs).nth(0).unwrap_or(&grail_default);
+    // let grail_position = grail.iter(ecs).nth(0).unwrap();
 
     let mut new_state = match current_state {
         TurnState::AwaitingInput => return,
@@ -26,6 +29,12 @@ pub fn end_turn(ecs: &SubWorld, #[resource] turn_state: &mut TurnState) {
         // Check if the player has reached the grail
         if pos == grail_position {
             new_state = TurnState::Victory;
+        }
+
+        // Check if player is on exit tiles
+        let idx = map.point2d_to_index(*pos);
+        if map.tiles[idx] == TileType::Exit {
+            new_state = TurnState::NextLevel;
         }
     });
 

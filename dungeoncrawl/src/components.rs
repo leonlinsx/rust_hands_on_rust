@@ -7,8 +7,11 @@ pub struct Render {
     pub glyph: FontCharType,
 }
 
+// serves as tag indicating entity is player
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Player; // serves as tag indicating entity is player
+pub struct Player{
+    pub map_level: u32,
+} 
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Enemy;

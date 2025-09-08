@@ -2,7 +2,7 @@ use crate::prelude::*;
 
 pub fn spawn_player(ecs: &mut World, position: Point) {
     ecs.push((
-        Player, // tag component indicating entity is a player
+        Player { map_level: 0 }, // tag component indicating entity is a player
         position,
         Render {
             color: ColorPair::new(BLUE, BLACK),

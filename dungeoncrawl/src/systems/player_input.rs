@@ -23,11 +23,14 @@ pub fn player_input(
     // Convert key input into an Action enum
     let action = if let Some(key) = *key {
         match key {
+            // Movement keys
             VirtualKeyCode::Left | VirtualKeyCode::A => Action::Move(Point::new(-1, 0)),
             VirtualKeyCode::Right | VirtualKeyCode::D => Action::Move(Point::new(1, 0)),
             VirtualKeyCode::Up | VirtualKeyCode::W => Action::Move(Point::new(0, -1)),
             VirtualKeyCode::Down | VirtualKeyCode::S => Action::Move(Point::new(0, 1)),
+            // Pickup item
             VirtualKeyCode::G => Action::PickupAt(player_pos),
+            // Use item from inventory (1-9 keys)
             VirtualKeyCode::Key1 => Action::Use(0),
             VirtualKeyCode::Key2 => Action::Use(1),
             VirtualKeyCode::Key3 => Action::Use(2),
@@ -37,6 +40,7 @@ pub fn player_input(
             VirtualKeyCode::Key7 => Action::Use(6),
             VirtualKeyCode::Key8 => Action::Use(7),
             VirtualKeyCode::Key9 => Action::Use(8),
+            // No action for other keys
             _ => Action::None,
         }
     } else {
