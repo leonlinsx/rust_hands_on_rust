@@ -4,7 +4,6 @@ use crate::prelude::*;
 #[read_component(Point)]
 #[read_component(Player)]
 #[read_component(Enemy)]
-#[write_component(Health)]
 #[read_component(Item)]
 #[read_component(Carried)]
 pub fn player_input(
@@ -13,92 +12,130 @@ pub fn player_input(
     #[resource] key: &Option<VirtualKeyCode>,
     #[resource] turn_state: &mut TurnState,
 ) {
-    // Query player once, keep entity in outer scope
-    let mut players = <(Entity, &Point)>::query().filter(component::<Player>());
-    let (player_entity, player_pos) = players
-        .iter(ecs)
-        .find_map(|(entity, pos)| Some((*entity, *pos)))
-        .unwrap();
+    // Get the player entity and position first (short-lived borrow)
+    let (player_entity, player_pos) = {
+        let mut q = <(Entity, &Point)>::query().filter(component::<Player>());
+        q.iter(ecs)
+            .find_map(|(e, p)| Some((*e, *p)))
+            .expect("Player entity not found")
+    };
 
-    if let Some(key) = *key {
-        let delta = match key {
-            VirtualKeyCode::Left | VirtualKeyCode::A => Point::new(-1, 0),
-            VirtualKeyCode::Right | VirtualKeyCode::D => Point::new(1, 0),
-            VirtualKeyCode::Up | VirtualKeyCode::W => Point::new(0, -1),
-            VirtualKeyCode::Down | VirtualKeyCode::S => Point::new(0, 1),
-            
-            // pick up item
-            VirtualKeyCode::G => {
-                // return tuple of player entity and position
-                let (player, player_pos) = players
+    // Convert key input into an Action enum
+    let action = if let Some(key) = *key {
+        match key {
+            VirtualKeyCode::Left | VirtualKeyCode::A => Action::Move(Point::new(-1, 0)),
+            VirtualKeyCode::Right | VirtualKeyCode::D => Action::Move(Point::new(1, 0)),
+            VirtualKeyCode::Up | VirtualKeyCode::W => Action::Move(Point::new(0, -1)),
+            VirtualKeyCode::Down | VirtualKeyCode::S => Action::Move(Point::new(0, 1)),
+            VirtualKeyCode::G => Action::PickupAt(player_pos),
+            VirtualKeyCode::Key1 => Action::Use(0),
+            VirtualKeyCode::Key2 => Action::Use(1),
+            VirtualKeyCode::Key3 => Action::Use(2),
+            VirtualKeyCode::Key4 => Action::Use(3),
+            VirtualKeyCode::Key5 => Action::Use(4),
+            VirtualKeyCode::Key6 => Action::Use(5),
+            VirtualKeyCode::Key7 => Action::Use(6),
+            VirtualKeyCode::Key8 => Action::Use(7),
+            VirtualKeyCode::Key9 => Action::Use(8),
+            _ => Action::None,
+        }
+    } else {
+        Action::None
+    };
+
+    let mut did_something = false;
+    let mut item_to_activate: Option<Entity> = None;
+
+    // Handle the action (all ECS borrows are scoped)
+    match action {
+        Action::Move(delta) => {
+            if delta != Point::zero() {
+                let destination = player_pos + delta;
+
+                let mut enemies = <(Entity, &Point)>::query().filter(component::<Enemy>());
+                let mut hit = false;
+
+                enemies
                     .iter(ecs)
-                    .find_map(|(entity, pos)| Some((*entity, *pos)))
-                    .unwrap();
-                let mut items = <(Entity, &Item, &Point)>::query();
-                // return entities with item component at player position
-                items
-                    .iter(ecs)
-                    .filter(|t| t.2 == &player_pos) // t: &(&Entity, &Item, &Point); t.2: &Point
-                    .for_each(|t| {
-                        let entity = t.0; // t.0: &Entity
-                        commands.remove_component::<Point>(*entity);
-                        commands.add_component(*entity, Carried(player));
+                    .filter(|(_, pos)| **pos == destination)
+                    .for_each(|(victim, _)| {
+                        hit = true;
+                        commands.push((
+                            (),
+                            WantsToAttack {
+                                attacker: player_entity,
+                                victim: *victim,
+                            },
+                        ));
                     });
 
-                Point::new(0, 0) // no movement
-            }
-
-            _ => Point::new(0, 0),
-        };
-
-        let mut did_something = false; // track if an action was taken
-        let destination = player_pos + delta;
-
-        if delta.x != 0 || delta.y != 0 {
-            // try to attack enemies at destination; otherwise move
-            let mut enemies = <(Entity, &Point)>::query().filter(component::<Enemy>());
-            let mut hit_something = false;
-
-            // check if any enemies are at the destination
-            enemies
-                .iter(ecs)
-                .filter(|(_, pos)| **pos == destination)
-                .for_each(|(entity, _)| {
-                    hit_something = true;
-                    did_something = true;
+                if !hit {
                     commands.push((
                         (),
-                        WantsToAttack {
-                            attacker: player_entity,
-                            victim: *entity,
+                        WantsToMove {
+                            entity: player_entity,
+                            destination,
                         },
                     ));
+                }
+
+                did_something = true;
+            }
+        }
+
+        Action::PickupAt(pos) => {
+            let mut items = <(Entity, &Item, &Point)>::query();
+            items
+                .iter(ecs)
+                .filter(|(_, _, item_pos)| *item_pos == &pos)
+                .for_each(|(entity, _, _)| {
+                    commands.remove_component::<Point>(*entity);
+                    commands.add_component(*entity, Carried(player_entity));
                 });
 
-            if !hit_something {
+            did_something = true;
+        }
+
+        Action::Use(index) => {
+            let mut q = <(Entity, &Item, &Carried)>::query();
+            let result = q
+                .iter(ecs)
+                .filter(|(_, _, carried)| carried.0 == player_entity)
+                .enumerate()
+                .find_map(|(i, (entity, _, _))| (i == index).then_some(*entity));
+
+            if let Some(item) = result {
+                item_to_activate = Some(item);
                 did_something = true;
-                commands.push((
-                    (),
-                    WantsToMove {
-                        entity: player_entity,
-                        destination,
-                    },
-                ));
             }
         }
 
-        // Recover health if no action taken (delta was zero or nothing else happened)
-        if !did_something {
-            if let Ok(health) = ecs
-                .entry_mut(player_entity)
-                .unwrap()
-                .get_component_mut::<Health>()
-            {
-                health.current = i32::min(health.max, health.current + 1); // capped at max health
-                println!("You rest and recover 1 hp.");
-            }
+        Action::None => {
+            // If there's no input, we do NOT set `turn_state` – just return early
+            return;
         }
+    }
 
+    // Push the item activation as a deferred command
+    if let Some(item) = item_to_activate {
+        commands.push((
+            (),
+            ActivateItem {
+                used_by: player_entity,
+                item,
+            },
+        ));
+    }
+
+    if did_something {
         *turn_state = TurnState::PlayerTurn;
     }
+}
+
+// Internal enum to represent player actions
+enum Action {
+    None,
+    Move(Point),
+    PickupAt(Point),
+    Use(usize),
 }
