@@ -46,6 +46,17 @@ pub struct Item;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Grail;
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ProvidesHealing {
+    pub amount: i32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ProvidesDungeonMap;
+
+#[derive(Clone, PartialEq)]
+pub struct Carried(pub Entity);
+
 // HashSet doesn't implement copy, so we can't derive Copy
 #[derive(Clone, Debug, PartialEq)]
 pub struct FieldOfView {
