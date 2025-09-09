@@ -1,3 +1,5 @@
+// v1.0.0 - Initial release of dungeon crawler from hands-on rust by herbert wolverson
+
 mod camera;
 mod components;
 mod map;
@@ -25,6 +27,8 @@ mod prelude {
 }
 
 use prelude::*;
+use std::env;
+use std::path::Path;
 
 struct State {
     // Game state fields go here
@@ -229,13 +233,43 @@ impl GameState for State {
     }
 }
 
+fn resource_root() -> String {
+    let mut dir = env::current_exe()
+        .expect("current_exe")
+        .parent()
+        .expect("exe parent")
+        .to_path_buf();
+
+    // Walk up to 5 levels looking for a resources folder
+    for _ in 0..5 {
+        let candidate = dir.join("resources");
+        if candidate.join("dungeonfont.png").exists() && candidate.join("terminal8x8.png").exists()
+        {
+            return candidate.to_string_lossy().into_owned();
+        }
+        if let Some(parent) = dir.parent() {
+            dir = parent.to_path_buf();
+        } else {
+            break;
+        }
+    }
+
+    // Fallback to project root resources
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("resources")
+        .to_string_lossy()
+        .into_owned()
+}
+
 fn main() -> BError {
+    let res = resource_root();
+
     let context = BTermBuilder::new()
         .with_title("Dungeon Crawler")
         .with_fps_cap(30.0) // tracks game speed to prevent player from moving too quickly
         .with_dimensions(DISPLAY_WIDTH, DISPLAY_HEIGHT)
         .with_tile_dimensions(32, 32)
-        .with_resource_path("resources/")
+        .with_resource_path(&res) // absolute path to resources
         .with_font("dungeonfont.png", 32, 32)
         .with_font("terminal8x8.png", 8, 8)
         .with_simple_console(DISPLAY_WIDTH, DISPLAY_HEIGHT, "dungeonfont.png")

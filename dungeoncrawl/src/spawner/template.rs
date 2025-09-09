@@ -3,7 +3,7 @@ use legion::systems::CommandBuffer;
 use ron::de::from_reader;
 use serde::Deserialize;
 use std::collections::HashSet;
-use std::fs::File;
+use std::{fs::File, path::PathBuf};
 
 // every type in struct needs to support Deserialize
 #[derive(Deserialize, Clone, Debug)]
@@ -30,11 +30,41 @@ pub struct Templates {
     pub entities: Vec<Template>,
 }
 
+fn open_resource(rel: &str) -> std::io::Result<File> {
+    // 1) Try current working dir (works if main already set CWD to the exe dir)
+    if let Ok(f) = File::open(rel) {
+        return Ok(f);
+    }
+
+    // 2) Try alongside the executable (works even if CWD wasn’t fixed)
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let p = dir.join(rel);
+            if let Ok(f) = File::open(&p) {
+                return Ok(f);
+            }
+        }
+    }
+
+    // 3) Try project root (nice for `cargo test` / dev runs)
+    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(rel);
+    if let Ok(f) = File::open(&p) {
+        return Ok(f);
+    }
+
+    Err(std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        format!("Couldn't find resource: {}", rel),
+    ))
+}
+
 impl Templates {
     pub fn load() -> Self {
-        let file = File::open("resources/template.ron").expect("Failed to open file");
-        from_reader(file).expect("Failed to parse file")
+        let file =
+            open_resource("resources/template.ron").expect("Failed to open resources/template.ron");
+        from_reader(file).expect("Failed to parse template.ron")
     }
+    // pub fn load() -> Self { let file = File::open("resources/template.ron").expect("Failed to open file"); from_reader(file).expect("Failed to parse file") }
 
     pub fn spawn_entities(
         &self,
